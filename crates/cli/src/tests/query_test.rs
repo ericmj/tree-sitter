@@ -5,8 +5,8 @@ use rand::{prelude::StdRng, SeedableRng};
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{
     CaptureQuantifier, InputEdit, Language, Node, Parser, Point, Query, QueryCursor,
-    QueryCursorOptions, QueryError, QueryErrorKind, QueryPredicate, QueryPredicateArg,
-    QueryProperty, Range,
+    QueryCursorOptions, QueryCursorState, QueryError, QueryErrorKind, QueryPredicate,
+    QueryPredicateArg, QueryProperty, Range,
 };
 use tree_sitter_generate::load_grammar_file;
 use unindent::Unindent;
@@ -6048,6 +6048,43 @@ fn test_query_execution_with_timeout() {
         .matches(&query, tree.root_node(), source_code.as_bytes())
         .count();
     assert_eq!(matches, 1000);
+}
+
+#[test]
+fn test_query_captures_progress_callback_stops_behind_an_open_match() {
+    let language = get_language("javascript");
+    let mut parser = Parser::new();
+    parser.set_language(&language).unwrap();
+
+    let numbers = (0..1000).map(|i| i.to_string()).collect::<Vec<_>>();
+    let source_code = format!("[{}];", numbers.join(","));
+    let tree = parser.parse(&source_code, None).unwrap();
+
+    // The first pattern stays in progress until the array ends, so every number
+    // capture finishes behind it.
+    let query = Query::new(
+        &language,
+        "(array (number) @first (string)) (number) @number",
+    )
+    .unwrap();
+
+    let mut calls = 0;
+    let mut progress_callback = |_: &QueryCursorState| {
+        calls += 1;
+        ControlFlow::Break(())
+    };
+    let mut cursor = QueryCursor::new();
+    let captures = cursor
+        .captures_with_options(
+            &query,
+            tree.root_node(),
+            source_code.as_bytes(),
+            QueryCursorOptions::new().progress_callback(&mut progress_callback),
+        )
+        .count();
+
+    assert!(captures < 1000);
+    assert_eq!(calls, 1);
 }
 
 #[test]

@@ -608,6 +608,29 @@ describe('Query', () => {
       const matches2 = query.matches(tree.rootNode);
       expect(matches2).toHaveLength(1000);
     });
+
+    it('Returns less than the expected captures', () => {
+      tree = parser.parse('function foo() while (true) { } }\n'.repeat(1000))!;
+      query = new Query(JavaScript, '(function_declaration) @function');
+
+      const startTime = performance.now();
+
+      const captures = query.captures(
+        tree.rootNode,
+        {
+          progressCallback: () => {
+            if (performance.now() - startTime > 1) {
+              return true;
+            }
+            return false;
+          },
+        }
+      );
+      expect(captures.length).toBeLessThan(1000);
+
+      const captures2 = query.captures(tree.rootNode);
+      expect(captures2).toHaveLength(1000);
+    });
   });
 });
 

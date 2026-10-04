@@ -4050,16 +4050,16 @@ static inline bool ts_query_cursor__advance(
     if (self->query_options && self->query_options->progress_callback) {
       self->query_state.current_byte_offset = ts_node_start_byte(ts_tree_cursor_current_node(&self->cursor));
     }
+    if (did_match || self->halted) {
+      return did_match;
+    }
     if (
-      did_match ||
-      self->halted ||
-      (
-        self->operation_count == 0 &&
-        (
-          (self->query_options && self->query_options->progress_callback && self->query_options->progress_callback(&self->query_state))
-        )
-      )
+      self->operation_count == 0 &&
+      self->query_options &&
+      self->query_options->progress_callback &&
+      self->query_options->progress_callback(&self->query_state)
     ) {
+      self->halted = true;
       return did_match;
     }
 

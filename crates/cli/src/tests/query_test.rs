@@ -6127,6 +6127,43 @@ fn test_query_progress_callback_lives_as_long_as_matches() {
 }
 
 #[test]
+fn test_query_captures_progress_callback_stops_behind_an_open_match() {
+    let language = get_language("javascript");
+    let mut parser = Parser::new();
+    parser.set_language(&language).unwrap();
+
+    let numbers = (0..1000).map(|i| i.to_string()).collect::<Vec<_>>();
+    let source_code = format!("[{}];", numbers.join(","));
+    let tree = parser.parse(&source_code, None).unwrap();
+
+    // The first pattern stays in progress until the array ends, so every number
+    // capture finishes behind it.
+    let query = Query::new(
+        &language,
+        "(array (number) @first (string)) (number) @number",
+    )
+    .unwrap();
+
+    let mut calls = 0;
+    let mut progress_callback = |_: &QueryCursorState| {
+        calls += 1;
+        ControlFlow::Break(())
+    };
+    let mut cursor = QueryCursor::new();
+    let captures = cursor
+        .captures_with_options(
+            &query,
+            tree.root_node(),
+            source_code.as_bytes(),
+            QueryCursorOptions::new().progress_callback(&mut progress_callback),
+        )
+        .count();
+
+    assert!(captures < 1000);
+    assert_eq!(calls, 1);
+}
+
+#[test]
 fn test_query_execution_with_points_causing_underflow() {
     let language = get_language("rust");
     let mut parser = Parser::new();
